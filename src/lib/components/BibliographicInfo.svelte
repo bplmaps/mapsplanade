@@ -85,9 +85,9 @@
         <div class="text-gray-400 p-1">
           {item.response.document[field] &&
           item.response.document[field].length > 60
-            ? `${item.response.document[field].toString().slice(0, 60)}...`
+            ? `${item.response.document[field].slice(0, 60)}...`
             : item.response.document[field]}
-          {console.log(item.response.document[field].toString().slice(0, 60))}
+          {console.log(item.response.document[field].slice(0, 60))}
         </div>
       </div>
     {/each}

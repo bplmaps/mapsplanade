@@ -1,7 +1,8 @@
 <script>
   import Map from "$lib/components/Map.svelte";
+  import Splash from "$lib/components/Splash.svelte";
 </script>
-
-<h1 class="text-3xl black font-black text-center m-2">Mapsplanade</h1>
-
-<Map />
+<div class="relative w-full h-screen">
+  <Map />
+  <Splash />
+</div>

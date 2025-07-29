@@ -1,4 +1,5 @@
 <script>
+  import { hovered } from "$lib/stores.js";
   import { onMount } from "svelte";
   import OlMap from "ol/Map";
   import View from "ol/View";
@@ -9,96 +10,134 @@
   import Stroke from "ol/style/Stroke";
   import Fill from "ol/style/Fill";
   import { useGeographic } from "ol/proj";
-  import Tile from "ol/layer/Tile";
   import { TileJSON } from "ol/source";
   import Select from "ol/interaction/Select";
   import { click, pointerMove } from "ol/events/condition";
   import BibliographicInfo from "./BibliographicInfo.svelte";
+  import TileLayer from "ol/layer/Tile";
 
-  let title = $state();
-  let creator = $state();
-  let date = $state(); // width, height;
-  let hovered = $state(false);
+  let item = $state();
 
   useGeographic();
 
   let map;
   const mtkey = "xzHYzv10Mfc1eJ8Vbizl";
 
-  // Dynamic style function using `id`
-  const patternCache = new Map();
+  const canvasCache = new Map();
 
-  // onMount(async () => {
-  //   // if (!hoveredId) return;
-  //   const res = await fetch(
-  //     `https://collections.leventhalmap.org/search/${id}.json`
-  //   );
+  async function loadThumbnailPattern(id, width = 512, height = 512) {
+    if (canvasCache.has(id)) return canvasCache.get(id);
 
-  //   const item = await res.json();
-  //   console.log(item);
-  //   // title = item.title_primary_;
-  //   // creator = item.creator;
-  //   // date = item.date;
-  // });
-
-  function loadThumbnailPattern(id) {
     return new Promise((resolve) => {
-      if (patternCache.has(id)) return resolve(patternCache.get(id));
-
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.src = `https://s3.us-east-2.wasabisys.com/lmec-public-files/thumbnails/${id}.png`;
 
       img.onload = () => {
         const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
         const ctx = canvas.getContext("2d");
-        canvas.width = img.height;
-        canvas.height = img.width;
-        ctx.drawImage(img, 0, 0);
-        const pattern = ctx.createPattern(img, "repeat");
-        ctx.fillRect(0, 0, 300, 300);
-        if (pattern) {
-          patternCache.set(id, pattern);
-          resolve(pattern);
-        } else {
-          resolve(null);
-        }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvasCache.set(id, canvas);
+        resolve(canvas);
       };
 
       img.onerror = () => {
-        // console.warn(`Failed to load thumbnail for ${id}`);
+        console.warn(`Thumbnail failed to load: ${id}`);
         resolve(null);
       };
     });
   }
 
-  function hoverStyleFunction(feature) {
+  function baseStyleFunction(feature) {
     const id = feature.get("id");
-    const pattern = patternCache.get(id);
-
+    const fillPattern = canvasCache.get(id) || "#eeeeee";
     return new Style({
-      fill: new Fill({ color: pattern || "#cccccc" }),
-      stroke: new Stroke({ color: "red", width: 2 }),
+      fill: new Fill({ color: fillPattern }),
     });
   }
 
-  const baseStyle = new Style({
-    fill: new Fill({ color: "#eeeeee" }),
-  });
+  function hoverStyleFunction(feature) {
+    const id = feature.get("id");
+    const canvas = canvasCache.get(id);
+    if (!canvas) return null;
+
+    const base = thumbnailStyleFunction(feature);
+
+    return new Style({
+      renderer: base.getRenderer(),
+      stroke: new Stroke({ color: "white", width: 4 }),
+      zIndex: 10,
+    });
+  }
+
+  function clickStyleFunction(feature) {
+    const id = feature.get("id");
+    const pattern = canvasCache.get(id);
+    return new Style({
+      fill: new Fill({ color: pattern || "#cccccc" }),
+      stroke: new Stroke({ color: "white", width: 4 }),
+    });
+  }
+
+  function thumbnailStyleFunction(feature) {
+    const id = feature.get("id");
+    const canvas = canvasCache.get(id);
+    if (!canvas) return null;
+
+    return new Style({
+      renderer: (pixelCoords, renderState) => {
+        const ctx = renderState.context;
+        if (!pixelCoords || pixelCoords.length === 0) return;
+
+        ctx.save();
+        ctx.beginPath();
+
+        pixelCoords.forEach((ring) => {
+          ring.forEach(([x, y], i) => {
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+        });
+
+        ctx.clip();
+
+        // Compute bounding box in pixel space
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+
+        pixelCoords[0].forEach(([x, y]) => {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        });
+
+        const width = maxX - minX;
+        const height = maxY - minY;
+
+        // Draw the cached thumbnail image to fit polygon bbox
+        ctx.drawImage(canvas, minX, minY, width, height);
+        ctx.restore();
+      },
+    });
+  }
 
   onMount(async () => {
-    async function getData(hoveredId) {
+    async function getData(id) {
       const res = await fetch(
-        `https://collections.leventhalmap.org/search/${hoveredId}.json`
+        `https://collections.leventhalmap.org/search/${id}.json`
       );
-      const item = await res.json();
-      console.log(item)
-      title = item["response"]["document"]["title_info_primary_tsi"];
-      creator = item["response"]["document"]["name_tsim"];
-      date = item["response"]["document"]["date_tsim"][0];
+      item = await res.json();
     }
 
-    const bboxes = await fetch("/assets/bboxes.geojson").then((r) => r.json());
+    const bboxes = await fetch("/assets/bboxes_20250729.geojson").then((r) =>
+      r.json()
+    );
 
     let features = new GeoJSON().readFeatures(bboxes, {
       featureProjection: "EPSG:4326",
@@ -106,19 +145,24 @@
 
     // only use the first 100 features of while testing
 
-    features = features.slice(0, 100);
+    features = features.slice(0, 500);
 
     const featureIds = features.map((f) => f.get("id"));
 
-    await loadThumbnailPattern(featureIds);
+    await Promise.all(
+      features.map(async (feature) => {
+        const id = feature.get("id");
+        await loadThumbnailPattern(id);
+        feature.setStyle(thumbnailStyleFunction(feature));
+      })
+    );
 
     const vectorSource = new VectorSource({ features });
 
     map = new OlMap({
-      target: "map",
       controls: [],
       layers: [
-        new Tile({
+        new TileLayer({
           source: new TileJSON({
             url: `https://api.maptiler.com/maps/satellite/tiles.json?key=${mtkey}`,
             tileSize: 512,
@@ -127,12 +171,10 @@
         }),
         new VectorLayer({
           source: vectorSource,
-          style: (feature) =>
-            new Style({
-              fill: new Fill({ color: feature.get("COLOR") || "#eeeeee" }),
-            }),
+          style: baseStyleFunction,
         }),
       ],
+      target: "map",
       view: new View({
         center: [-71.062608967, 42.352372528],
         zoom: 30,
@@ -140,46 +182,65 @@
       }),
     });
 
-    // Hover interaction
+    let previousHovered = null;
+    map.on("pointermove", function (e) {
+      var pixel = map.getEventPixel(e.originalEvent);
+      var hit = map.hasFeatureAtPixel(pixel);
+      map.getViewport().style.cursor = hit ? "pointer" : "";
+    });
+    map.on("pointermove", (e) => {
+      let found = false;
 
-    const hoverSelect = new Select({
-      condition: pointerMove,
-      style: (feature) => {
+      map.forEachFeatureAtPixel(e.pixel, (feature) => {
+        hovered.set(feature);
+        found = true;
+
         const id = feature.get("id");
         getData(id);
 
-        if (!patternCache.has(id)) {
-          loadThumbnailPattern(id).then(() => {
-            map.render();
-          });
+        if (previousHovered && previousHovered !== feature) {
+          previousHovered.setStyle(thumbnailStyleFunction(previousHovered));
         }
 
-        return new Style({
-          fill: new Fill({ color: patternCache.get(id) || "#eeeeee" }),
-          stroke: new Stroke({ color: "red", width: 2 }),
-          zIndex: 1001,
-        });
-      },
+        feature.setStyle(hoverStyleFunction(feature)); // this isn't working
+        previousHovered = feature;
+
+        return true;
+      });
+
+      if (!found) {
+        if (previousHovered) {
+          // ❗ Restore style here too
+          previousHovered.setStyle(thumbnailStyleFunction(previousHovered));
+          previousHovered = null;
+        }
+        hovered.set(null);
+        item = null;
+      }
     });
 
     map.on("moveend", () => {
       const extent = map.getView().calculateExtent(map.getSize());
       vectorSource.forEachFeatureInExtent(extent, (feature) => {
         const id = feature.get("id");
-        if (id && !patternCache.has(id)) {
-          loadThumbnailPattern(id); // preload silently
+        if (id && !canvasCache.has(id)) {
+          loadThumbnailPattern(id);
         }
       });
     });
 
-    // Click interaction
+    // Initial preload
+    features.forEach((feature) => {
+      const id = feature.get("id");
+      loadThumbnailPattern(id);
+    });
+
     const clickSelect = new Select({
       condition: click,
-      style: hoverStyleFunction,
+      style: clickStyleFunction,
     });
 
     try {
-      map.addInteraction(hoverSelect);
       map.addInteraction(clickSelect);
     } catch (error) {
       console.log(error);
@@ -198,30 +259,15 @@
   });
 </script>
 
-<div id="map" class="50-vw"></div>
-<div class="m-4 p-4 bg-gray-100">
-  <div class="flex">
-    <div class="w-1/6 text-lg font-semibold">Title:</div>
-    <div>{title}</div>
-  </div>
-  <div class="flex">
-    <div class="w-1/6 text-lg font-semibold">Creator:</div>
-    <div>{creator}</div>
-  </div>
-  <div class="flex">
-    <div class="w-1/6 text-lg font-semibold">Date:</div>
-    <div>{date}</div>
-  </div>
+<BibliographicInfo />
 
-  <!-- <div class="font-medium">Width:</div>
-  <div>{width}</div>
-
-  <div class="font-medium">Height:</div>
-  <div>{height}</div> -->
+<div class="w-full">
+  <div id="map"></div>
 </div>
 
 <style>
   #map {
-    height: 50vh;
+    width: 100%;
+    height: 60vh;
   }
 </style>

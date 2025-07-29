@@ -87,7 +87,6 @@
           item.response.document[field].length > 60
             ? `${item.response.document[field].slice(0, 60)}...`
             : item.response.document[field]}
-          {console.log(item.response.document[field].slice(0, 60))}
         </div>
       </div>
     {/each}

@@ -24,7 +24,7 @@
     <div
       class="relative overflow-hidden rounded-lg bg-gradient-to-tr from-purple-100 to-gray-50 px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-sm sm:p-6"
     >
-      <div class="absolute -inset-5 z-0 opacity-30 pointer-events-none">
+      <div class="absolute -inset-5 z-0 opacity-30 pointer-events-none animate-bounce h-10">
         {@html svgContent}
       </div>
 
@@ -33,10 +33,10 @@
           Mapsplanade
         </div>
 
-        <div class="m-3 text-center text-sm sm:mt-5">
+        <div class="m-3 text-center text-xl sm:mt-5">
           <p class="mb-4 text-shadow-lg text-shadow-white">
-            How long would all the maps in the Leventhal Map & Education Center's
-            collections be if you laid them on the ground back to back?
+            How long would all the maps in the <a class="text-blue-900 hover:text-blue-600 transition-colors" href="https://collections.leventhalmap.org" target="blank">Leventhal Map & Education Center's
+            collections</a> be if you laid them on the ground, back to back?
           </p>
         </div>
 
@@ -44,9 +44,9 @@
           <button
             type="button"
             on:click={toggleActive}
-            class="inline-flex w-full justify-center rounded-md bg-green-200 ring-2 text-md px-3 py-2 font-semibold text-slate-900 shadow-sm hover:bg-green-300 focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-orange-600 animate-pulse"
+            class="inline-flex w-full justify-center rounded-md bg-green-200 ring-2 text-xl px-3 py-2 font-semibold text-slate-900 shadow-sm hover:bg-green-300 focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-orange-600 animate-pulse"
           >
-            Walk the Mapsplanade to find out
+            Walk the Mapsplanade to find out!
           </button>
         </div>
 
@@ -59,13 +59,7 @@
               target="_blank"
               >Leventhal Map & Education Center</a
             >
-            at the Boston Public Library, for
-            <a
-              class="text-blue-900 hover:text-blue-600 transition-colors"
-              href="https://gardensofegleston.org/"
-              target="_blank"
-              >Gardens of Egleston</a
-            >
+            at the Boston Public Library
           </p>
         </div>
       </div>
